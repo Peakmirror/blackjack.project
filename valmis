@@ -1,0 +1,116 @@
+#impordib kõik vajaliku
+import discord
+from discord.ext import commands
+import random
+
+intents = discord.Intents.all()
+intents.typing = False
+intents.presences = False
+intents.message_content = True
+bot = commands.Bot(command_prefix='!', intents=intents)
+
+# kaardid ja muu
+deck = [2, 3, 4, 5, 6, 7, 8, 9, 10, "J", "Q", "K", "A"] * 4
+playerhand = []
+dealerhand = []
+player_in = True
+dealer_in = True
+
+# jagab kaarte
+def deal_card(turn):
+    card = random.choice(deck)
+    turn.append(card)
+    deck.remove(card)
+
+# Käe väärtuse arvutamine
+def total(turn):
+    total = 0
+    face_cards = ["J", "Q", "K"]
+    for card in turn:
+        if isinstance(card, int):
+            total += card
+        elif card in face_cards:
+            total += 10
+        else:  # Äss
+            if total + 11 > 21:
+                total += 1
+            else:
+                total += 11
+    return total
+
+# Diileri käe nöitamine
+def reveal_dealer_hand():
+    if len(dealerhand) == 2:
+        return f"{dealerhand[0]} and X"
+    return f"{dealerhand[0]}, {dealerhand[1]}"
+
+# Blackjack käsu definitsioon
+@bot.command()
+async def blackjack(ctx):
+    global playerhand, dealerhand, player_in, dealer_in, deck
+
+    # Mängu algus
+    playerhand = []
+    dealerhand = []
+    player_in = True
+    dealer_in = True
+    deck = [2, 3, 4, 5, 6, 7, 8, 9, 10, "J", "Q", "K", "A"] * 4
+
+    for _ in range(2):
+        deal_card(playerhand)
+        deal_card(dealerhand)
+
+    while player_in or dealer_in:
+        player_total = total(playerhand)
+        dealer_total = total(dealerhand)
+
+        if player_total >= 21 or dealer_total >= 21:
+            break
+
+        # mängu seis
+        await ctx.send(f"Dealer has {reveal_dealer_hand()}")
+        await ctx.send(f"You have {playerhand} for a total of {player_total}")
+
+        # Mängija tegevus
+        if player_in:
+            await ctx.send("Type 'hit' to draw a card or 'stay' to hold your position.")
+            try:
+                msg = await bot.wait_for('message', check=lambda m: m.author == ctx.author, timeout=30)
+                if msg.content.lower() == "hit":
+                    deal_card(playerhand)
+                elif msg.content.lower() == "stay":
+                    player_in = False
+                else:
+                    await ctx.send("Invalid command! Type 'hit' or 'stay'.")
+            except:
+                await ctx.send("You took too long to respond. Ending your turn.")
+                player_in = False
+
+        # diileri tegevus
+        if dealer_in and total(dealerhand) < 17:
+            deal_card(dealerhand)
+        else:
+            dealer_in = False
+
+    # Võitja tuvastamine
+    player_total = total(playerhand)
+    dealer_total = total(dealerhand)
+
+    if player_total == 21:
+        await ctx.send(f"Blackjack! You win! Your hand: {playerhand}, Dealer's hand: {dealerhand}")
+    elif dealer_total == 21:
+        await ctx.send(f"Dealer got Blackjack! You lose! Your hand: {playerhand}, Dealer's hand: {dealerhand}")
+    elif player_total > 21:
+        await ctx.send(f"You bust! Dealer wins! Your hand: {playerhand}, Dealer's hand: {dealerhand}")
+    elif dealer_total > 21:
+        await ctx.send(f"Dealer busts! You win! Your hand: {playerhand}, Dealer's hand: {dealerhand}")
+    elif abs(21 - player_total) < abs(21 - dealer_total):
+        await ctx.send(f"You win! Your hand: {playerhand}, Dealer's hand: {dealerhand}")
+    else:
+        await ctx.send(f"Dealer wins! Your hand: {playerhand}, Dealer's hand: {dealerhand}")
+
+@bot.event
+async def on_ready():
+    print(f'{blackjack} is active!')
+
+bot.run('bottoken')
